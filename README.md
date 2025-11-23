@@ -11,11 +11,12 @@ If you have embedding data and want a quick way to explore the clusters and patt
 
 ## Getting Started 🛠️
 Make sure you have Python installed. Then, clone the repo, install dependencies, and run the application:
+```bash
 git clone https://github.com/dataelvisliang/embedding_atlas_nomic_streamlit.git
 cd embedding_atlas_nomic_streamlit
 pip install -r requirements.txt
 streamlit run 3_visualize_atlas_with_llm_deploy.py
-
+```
 
 ## Who Is This For? 👩‍💻👨‍💻
 - Data scientists or machine learning engineers working with embeddings
