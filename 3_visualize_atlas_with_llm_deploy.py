@@ -48,8 +48,6 @@ with st.sidebar:
     st.title("🌍 Embedding Atlas")
     st.header("TripAdvisor Reviews")
     
-    load_button = st.button("📂 Load Projected Data", type="primary")
-    
     st.markdown("---")
     st.subheader("🤖 Chat Settings")
     chat_model = st.selectbox(
@@ -57,8 +55,8 @@ with st.sidebar:
         [
             "x-ai/grok-4.1-fast:free",
             "meta-llama/llama-3.2-3b-instruct:free",
-            "google/gemini-flash-1.5-8b:free",
-            "qwen/qwen-2-7b-instruct:free"
+            "openai/gpt-oss-20b:free",
+            "deepseek/deepseek-chat-v3-0324:free"
         ],
         help="Select AI model for chat"
     )
@@ -71,26 +69,19 @@ if 'selected_data' not in st.session_state:
 if 'chat_history' not in st.session_state:
     st.session_state['chat_history'] = []
 
-# Load processed data
-if load_button:
+# Auto-load data on startup
+if st.session_state['df_viz'] is None:
     try:
-        with st.spinner("Loading projected reviews..."):
-            df = pd.read_parquet('reviews_projected.parquet')
-            
-            sample = df['neighbors'].iloc[0]
-            if isinstance(sample, dict):
-                st.success("✅ Neighbors properly loaded as dict objects")
-            else:
-                st.warning(f"⚠️ Neighbors type: {type(sample)}")
-            
-            st.session_state['df_viz'] = df
-            st.success(f"✅ Loaded {len(df):,} projected reviews")
-            
+        df = pd.read_parquet('reviews_projected.parquet')
+        st.session_state['df_viz'] = df
+        st.toast("Data loaded successfully!", icon="✅")
     except FileNotFoundError:
+        st.toast("❌ reviews_projected.parquet not found!", icon="❌")
         st.error("❌ reviews_projected.parquet not found!")
         st.info("Please run: python 2_reduce_dimensions.py")
         st.stop()
     except Exception as e:
+        st.toast(f"❌ Error loading data", icon="❌")
         st.error(f"❌ Error loading data: {str(e)}")
         st.stop()
 
@@ -99,7 +90,6 @@ if st.session_state['df_viz'] is not None:
     df_viz = st.session_state['df_viz']
     
     st.header("🗺️ Interactive Review Atlas")
-    st.info(f"Visualizing {len(df_viz):,} reviews")
     
     try:
         value = embedding_atlas(
@@ -109,6 +99,7 @@ if st.session_state['df_viz'] is not None:
             y="projection_y",
             neighbors="neighbors",
             show_table=False,
+            show_charts=False
         )
         
         # Handle selection
@@ -116,7 +107,7 @@ if st.session_state['df_viz'] is not None:
             predicate = value.get("predicate")
             
             if predicate is not None:
-                st.subheader("📊 Selected Reviews")
+                st.subheader("📉 Deep Dive")
                 
                 try:
                     selection = duckdb.query_df(
@@ -124,7 +115,7 @@ if st.session_state['df_viz'] is not None:
                         "SELECT * FROM dataframe WHERE " + predicate
                     ).df()
                     
-                    st.success(f"Selected {len(selection):,} reviews")
+                    st.toast(f"Selected {len(selection):,} reviews", icon="📊")
                     
                     # Store selection in session state
                     st.session_state['selected_data'] = selection
@@ -149,6 +140,7 @@ if st.session_state['df_viz'] is not None:
                         # Clear chat button
                         if st.button("🗑️ Clear Chat History"):
                             st.session_state['chat_history'] = []
+                            st.toast("🗑️ Chat history cleared", icon="✅")
                             st.rerun()
                         
                         # Display chat history
@@ -208,27 +200,29 @@ Please answer the user's question based on these reviews."""
                                         'content': response
                                     })
                                     
+                                    st.toast("💬 Response received!", icon="✅")
                                     st.rerun()
                             else:
-                                st.warning("Please enter a question first!")
+                                st.toast("⚠️ Please enter a question first!", icon="⚠️")
                     
                 except Exception as e:
+                    st.toast(f"❌ Error querying selection", icon="❌")
                     st.error(f"Error querying selection: {str(e)}")
         
-        # Download full data
-        st.download_button(
-            label="📥 Download All Projected Reviews (CSV)",
-            data=df_viz.drop(columns=['neighbors']).to_csv(index=False).encode('utf-8'),
-            file_name='reviews_projected_full.csv',
-            mime='text/csv'
-        )
+        # # Download full data
+        # st.download_button(
+        #     label="📥 Download All Projected Reviews (CSV)",
+        #     data=df_viz.drop(columns=['neighbors']).to_csv(index=False).encode('utf-8'),
+        #     file_name='reviews_projected_full.csv',
+        #     mime='text/csv'
+        # )
         
     except Exception as e:
         st.error(f"❌ Error rendering Embedding Atlas: {str(e)}")
         st.exception(e)
 
 else:
-    st.info("👆 Click 'Load Projected Data' to visualize the reviews")
+    st.info("⏳ Loading data...")
 
 st.markdown("---")
 st.markdown("Built with [Apple Embedding Atlas](https://apple.github.io/embedding-atlas/) | Powered by OpenRouter AI")
