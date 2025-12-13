@@ -79,33 +79,49 @@ def chat_interface(selection, chat_model):
     """Chat interface as a fragment - reruns independently"""
     st.markdown("### 💬 Chat with Selected Reviews")
     
-    # Clear chat button
-    if st.button("🗑️ Clear Chat History"):
-        st.session_state['chat_history'] = []
-        st.rerun(scope="fragment")
+    # Clear chat button with better styling
+    col_ctrl1, col_ctrl2 = st.columns([0.8, 0.2])
+    with col_ctrl2:
+        if st.button("🗑️ Clear", help="Clear chat history"):
+            st.session_state['chat_history'] = []
+            st.rerun(scope="fragment")
     
-    # Display chat history
-    chat_container = st.container(height=300)
+    # Display chat history using chat_message
+    chat_container = st.container(height=400)
     with chat_container:
+        if not st.session_state['chat_history']:
+            st.info("👋 Ask me anything about the selected reviews!")
+            
         for msg in st.session_state['chat_history']:
-            if msg['role'] == 'user':
-                st.markdown(f"**You:** {msg['content']}")
-            else:
-                st.markdown(f"**AI:** {msg['content']}")
-    
-    # Chat form
+            # Use different avatars/icons
+            avatar = "👤" if msg['role'] == 'user' else "🤖"
+            with st.chat_message(msg['role'], avatar=avatar):
+                st.markdown(msg['content'])
+
+    # Chat input
+    # Using a form to ensure it works well within the fragment interaction model
     with st.form(key="chat_form", clear_on_submit=True):
         user_prompt = st.text_area(
-            "Ask a question about the selected reviews:",
-            placeholder="E.g., What are the common themes in these reviews?",
+            "Ask a question:",
+            placeholder="E.g., What do people say about the breakfast?",
             height=100,
             key="chat_input_form"
         )
         
-        submit_button = st.form_submit_button("🚀 Send", type="primary")
+        # Right-aligned send button
+        col_submit_spacer, col_submit_btn = st.columns([0.8, 0.2])
+        with col_submit_btn:
+            submit_button = st.form_submit_button("🚀 Send", type="primary", use_container_width=True)
         
         if submit_button and user_prompt:
-            with st.spinner("Thinking..."):
+            # Add user message immediately for responsiveness (optimistic update)
+            # changes to session state will be reflected on rerun
+            st.session_state['chat_history'].append({
+                'role': 'user',
+                'content': user_prompt
+            })
+            
+            with st.spinner("Analyzing reviews..."):
                 # Prepare context from selected reviews
                 reviews_text = "\n\n".join([
                     f"Review {i+1} (Rating: {row['Rating']}): {row['description']}"
@@ -113,7 +129,7 @@ def chat_interface(selection, chat_model):
                 ])
                 
                 # Create system message with context
-                system_msg = f"""You are an AI assistant analyzing TripAdvisor reviews. 
+                system_msg = f"""You are an AI assistant analyzing, enthusiastic TripAdvisor reviews. 
 
 Here are the selected reviews to analyze:
 
@@ -122,7 +138,7 @@ Here are the selected reviews to analyze:
 Total reviews selected: {len(selection)}
 Average rating: {selection['Rating'].mean():.2f}
 
-Please answer the user's question based on these reviews."""
+Please answer the user's question based on these reviews. Be concise and helpful."""
                 
                 # Build messages for API
                 messages = [
@@ -134,10 +150,6 @@ Please answer the user's question based on these reviews."""
                 response = chat_with_openrouter(messages, model=chat_model)
                 
                 # Update chat history
-                st.session_state['chat_history'].append({
-                    'role': 'user',
-                    'content': user_prompt
-                })
                 st.session_state['chat_history'].append({
                     'role': 'assistant',
                     'content': response
@@ -166,6 +178,13 @@ if st.session_state['df_viz'] is not None:
     df_viz = st.session_state['df_viz']
     
     st.header("🗺️ Interactive Review Atlas")
+    
+    # Custom CSS for improvements
+    st.markdown("""
+        <style>
+        .stDataFrame { border: 1px solid #f0f2f6; border-radius: 0.5rem; }
+        </style>
+    """, unsafe_allow_html=True)
     
     try:
         value = embedding_atlas(
@@ -203,23 +222,63 @@ if st.session_state['df_viz'] is not None:
             if st.session_state['selected_data'] is not None:
                 selection = st.session_state['selected_data']
                 
+                st.markdown("---")
+                
                 # Create two columns for display and chat
-                col1, col2 = st.columns([1, 1])
+                col1, col2 = st.columns([1.2, 1], gap="large")
                 
                 with col1:
-                    st.markdown("### 📄 Selected Reviews")
-                    st.dataframe(selection[['description', 'Rating']], height=400)
+                    st.markdown("### 📄 Selected Reviews Analysis")
+                    
+                    # Metrics Row
+                    m1, m2, m3 = st.columns(3)
+                    with m1:
+                        st.metric("Total Reviews", len(selection))
+                    with m2:
+                        avg_rating = selection['Rating'].mean()
+                        st.metric("Average Rating", f"{avg_rating:.1f} ⭐")
+                    with m3:
+                         # Placeholder for another metric if needed
+                         pass
+
+                    st.markdown("#### Review Details")
+                    
+                    # Enhanced DataFrame Display
+                    st.dataframe(
+                        selection[['Rating', 'description']],
+                        column_config={
+                            "Rating": st.column_config.NumberColumn(
+                                "Rating",
+                                help="User Rating (1-5)",
+                                min_value=1,
+                                max_value=5,
+                                step=1,
+                                format="%d ⭐"
+                            ),
+                            "description": st.column_config.TextColumn(
+                                "Review Text",
+                                help="Full text of the review",
+                                width="large"
+                            )
+                        },
+                        hide_index=True,
+                        use_container_width=True,
+                        height=400
+                    )
                     
                     st.download_button(
-                        label="📥 Download Selected Reviews",
+                        label="📥 Download CSV",
                         data=selection.to_csv(index=False).encode('utf-8'),
                         file_name='selected_reviews.csv',
-                        mime='text/csv'
+                        mime='text/csv',
+                        type="secondary"
                     )
                 
                 with col2:
                     # Render chat interface as fragment
-                    chat_interface(selection, chat_model)
+                    # Add a visual container/card effect
+                    with st.container(border=True):
+                        chat_interface(selection, chat_model)
         
     except Exception as e:
         st.error(f"❌ Error rendering Embedding Atlas: {str(e)}")
