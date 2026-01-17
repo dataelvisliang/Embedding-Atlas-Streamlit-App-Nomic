@@ -158,7 +158,10 @@ Please answer the user's question based on these reviews. Be concise and helpful
 # Auto-load data on startup
 if st.session_state['df_viz'] is None:
     try:
-        df = pd.read_parquet('reviews_projected.parquet')
+        import os
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        file_path = os.path.join(current_dir, 'reviews_projected.parquet')
+        df = pd.read_parquet(file_path)
         st.session_state['df_viz'] = df
         st.toast("Data loaded successfully!", icon="✅")
     except FileNotFoundError:
