@@ -1,46 +1,65 @@
-# Debugging Report: Embedding Atlas Label Generation
+# Architecture and Debugging Report
 
-**Date:** January 17, 2026
-**Project:** Embedding Atlas + Chatbot Web App
-**Status:** Resolved (Hybrid Strategy)
+## Current Architecture
+- **Framework**: React + Vite (Native Integration)
+- **Visualization**: `<EmbeddingAtlas />` component (from `embedding-atlas/react` v0.15.0)
+- **Data Engine**: DuckDB-WASM (via `@uwdata/mosaic-core`)
+- **Data Source**: Local Parquet file (`dataset.parquet`)
+- **Chat**: React State + Vercel Serverless Function (Planned)
 
-## 1. The Issue
-When integrating the `embedding-atlas` React component into a fresh Vite application, the map rendered correctly, but the label generation process would hang indefinitely with the message **"Generating labels..."**.
+**Note**: The previous "Hybrid Iframe" strategy (embedding a static HTML export) has been **discarded** in favor of this native integration, which allows for direct two-way communication between the Map and the Application (e.g. Selection Events).
 
-## 2. Investigation Findings
+---
 
-### Initial Hypothesis: Worker Configuration
-We suspected the library couldn't locate its web worker files (`clustering.worker.js`).
-- **Action**: Copied worker files from `node_modules` to `public/` and configured `window.EMBEDDING_ATLAS_HOME`.
-- **Result**: `failure`. The workers were loaded (HTTP 200), but the process still hung.
+## Issue: Labels "Generating..." Forever (Hang)
 
-### Secondary Hypothesis: Environment / Headers
-High-performance features in `embedding-atlas` (like DuckDB and clustering) require `SharedArrayBuffer`, which demands strict security headers.
-- **Action**: Verified `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`.
-- **Result**: `pass`. The environment was correctly configured (`window.crossOriginIsolated` was `true`). DuckDB loaded data, implying WASM was working for the main thread, but the worker specifically failed.
+### Symptoms
+- The native React component `<EmbeddingAtlas />` loads the map and points correctly.
+- A status message "Generating labels..." appears in the bottom left but never resolves.
+- Text labels never appear on the map in **Development Mode**.
+- (Labels work correctly in **Production Build**).
 
-### Third Hypothesis: Asset Resolution (WASM)
-The clustering worker might depend on specific WASM files or internal paths that Vite's bundler wasn't resolving correctly when importing from `node_modules`.
-- **Action**: Copied all `dist` assets including `.wasm` files to `public/dist` and updated the HOME path.
-- **Result**: `failure`. Silent fail. No explicit error in logs, likely due to a mismatch in how the worker was instantiated (classic vs module) or how it resolved its own dependencies.
+### Root Cause
+The `embedding-atlas` library uses Web Workers to perform density clustering and label generation. These workers utilize WASM binaries.
+In Vite's default Development Mode, dependencies are pre-bundled (Optimized). This pre-bundling process:
+1.  Can break the relative `import.meta.url` resolution used by the workers to find their WASM assets.
+2.  Can transform ES Module workers into a format incompatible with dynamic WASM imports.
 
-### Official Repo Check
-We examined the official `embedding-atlas` repository (locally available) and confirmed it uses a complex monorepo structure where workers are instantiated via `new URL(..., import.meta.url)`. This standard Vite pattern can sometimes break when consuming the pre-bundled package in a new Vite project if the assets aren't strictly aligned.
+### The Fix
 
-## 3. The Fix: Hybrid Iframe Strategy
-We discovered that the **Static Export** (from the Python script `print(atlas.export_html())`) produced a fully functional web app with working labels. This export uses a self-contained bundle where all internal paths are pre-resolved.
+We aligned our `vite.config.ts` with the official `embedding-atlas` examples to correctly handle these assets.
 
-**Refined Solution:**
-1.  **Asset Migration**: We moved the entire working static export (formerly `vercel-app`) to `web-app/public/atlas/`.
-2.  **Iframe Integration**: Instead of fighting the fragile bundler configuration of the React component, we simply render the robust static export inside a full-screen `<iframe>` within our React app.
-3.  **UI Overlay**: We overlayed the custom "Ask AI" Chat Widget on top of the iframe using higher `z-index`.
+#### 1. Enable ES Module Workers
+We explicitly configured Vite to keep workers as ES modules.
 
-## 4. Outcome
-- **Labels**: ✅ Working (Served by the static export).
-- **Visualization**: ✅ Full fidelity (Official Apple renderer).
-- **Chatbot**: ✅ Fully interactive React component.
-- **UX**: ✅ Seamless integration, looks like a single app.
+```typescript
+// vite.config.ts
+worker: {
+  format: "es", 
+},
+build: {
+  target: "esnext",
+}
+```
 
-## 5. Future Considerations
-- **Selection Sync**: Currently, the Chatbot doesn't know which points are selected in the iframe. To fix this, we would inject a small script into `public/atlas/index.html` that listens for Mosaic selection events and sends them to the parent window via `window.parent.postMessage()`.
-- **Backend**: The Chatbot is currently a demo. It needs to be connected to a Vercel Serverless Function to call the LLM API.
+#### 2. Exclude Libraries from Pre-Bundling
+We forced Vite to **skip** pre-bundling for the Atlas-related packages. This enables the browser to load the raw files from `node_modules`, ensuring that relative paths (like `./clustering.wasm`) resolve correctly at runtime.
+
+```typescript
+// vite.config.ts
+optimizeDeps: {
+  exclude: [
+    "embedding-atlas", 
+    "@uwdata/mosaic-core", 
+    "@duckdb/duckdb-wasm"
+  ],
+},
+```
+
+#### 3. Clean `index.html`
+We removed manual overrides (`window.EMBEDDING_ATLAS_HOME`) that were interfering with the library's automatic path resolution.
+
+### Result
+- **Dev Mode**: Labels generate successfully.
+- **Production Build**: Labels continue to work.
+- **Selection Logic**: We fixed a column ID mismatch (`_row_index` vs `__row_index__`), enabling the "Select" feature to pass selected data points to the Chat application.

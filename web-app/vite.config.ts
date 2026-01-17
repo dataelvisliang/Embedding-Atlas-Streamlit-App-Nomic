@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: "",
   server: {
     headers: {
       'Cross-Origin-Opener-Policy': 'same-origin',
@@ -10,4 +11,13 @@ export default defineConfig({
     },
   },
   plugins: [react()],
+  worker: {
+    format: "es",
+  },
+  build: {
+    target: "esnext",
+  },
+  optimizeDeps: {
+    exclude: ["embedding-atlas", "@uwdata/mosaic-core", "@duckdb/duckdb-wasm"],
+  },
 })
