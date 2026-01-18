@@ -18,6 +18,7 @@ The web app includes an AI analyst that can query and analyze the review dataset
 | Text Search | Find reviews by keywords or phrases (case-insensitive) |
 | Statistics | Get total counts, averages, and rating distributions |
 | Sampling | Retrieve example reviews with optional rating filters |
+| Topic Discovery | See cluster labels visible on the map |
 | Summarization | Natural language synthesis of query results |
 
 ### Example Questions
@@ -26,6 +27,7 @@ The web app includes an AI analyst that can query and analyze the review dataset
 - "How many 1-star reviews are there? What do they complain about?"
 - "Find reviews that mention 'noisy' or 'loud'"
 - "Show me the rating distribution"
+- "What topics are visible on the map?"
 - "What are the common themes in negative reviews?"
 
 ### How It Works
@@ -45,7 +47,7 @@ flowchart TB
         Atlas["Embedding Atlas<br/>2D visualization + selection"]
         Chat["Chat Widget<br/>Messages + input"]
         DuckDB["DuckDB-WASM<br/>20k+ reviews in-browser"]
-        Tools["Tool Executor<br/>sql_query | text_search | get_stats | get_sample"]
+        Tools["Tool Executor<br/>sql_query | text_search | get_stats | get_sample | get_topics"]
         
         Atlas -->|"selected points"| Chat
         Tools -->|"query"| DuckDB

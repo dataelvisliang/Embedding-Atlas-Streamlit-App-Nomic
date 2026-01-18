@@ -1,5 +1,58 @@
 import { Coordinator } from '@uwdata/mosaic-core';
 
+/**
+ * Extract visible topic labels from the Atlas visualization's Shadow DOM.
+ * Labels are rendered as text elements within the Shadow DOM of the embedding-atlas component.
+ */
+function extractTopicsFromDOM(): string[] {
+    const labels: string[] = [];
+
+    // Recursive function to traverse DOM including Shadow DOMs
+    const findLabelsInRoot = (root: Document | ShadowRoot | Element): void => {
+        // Use TreeWalker for efficient DOM traversal
+        const walker = document.createTreeWalker(
+            root as Node,
+            NodeFilter.SHOW_ELEMENT,
+            null
+        );
+
+        let node: Node | null = walker.currentNode;
+        while (node) {
+            const el = node as Element;
+
+            // Check if this element has a Shadow DOM and recurse into it
+            if (el.shadowRoot) {
+                findLabelsInRoot(el.shadowRoot);
+            }
+
+            // Look for elements containing topic labels
+            // Labels may be split across multiple <text> elements, so we check parent groups too
+            if (el.textContent) {
+                const text = el.textContent.trim();
+                // Topic labels are hyphenated keywords like "amsterdam-museums-tram-hotel"
+                // Must have at least 4 parts separated by hyphens and no trailing hyphen
+                const parts = text.split('-').filter(p => p.length > 0);
+                if (parts.length >= 4 && !text.endsWith('-') && !labels.includes(text)) {
+                    // Validation: each part should be word-like (letters, apostrophes, some special chars)
+                    // Allow unicode apostrophes: ' (39), ' (8217), ′ (8242)
+                    const validParts = parts.every(p => p.length >= 2 && /^[\w''′]+$/u.test(p));
+                    // Keep labels short, no special chars that indicate code/CSS
+                    if (validParts && text.length < 60 && !/[{}()=<>:;,\n\r\t]/.test(text)) {
+                        labels.push(text);
+                    }
+                }
+            }
+
+            node = walker.nextNode();
+        }
+    };
+
+    // Start from document body
+    findLabelsInRoot(document.body);
+
+    return labels;
+}
+
 export interface ToolCall {
     id: string;
     type: 'function';
@@ -61,6 +114,9 @@ export class ToolExecutor {
 
                 case 'get_sample':
                     return await this.getSample(toolCall.id, args.count, args.rating_filter);
+
+                case 'get_topics':
+                    return this.getTopics(toolCall.id);
 
                 default:
                     return {
@@ -371,6 +427,45 @@ export class ToolExecutor {
             }
         };
     }
+
+    /**
+     * Get visible topic labels from the Atlas visualization
+     * Extracts labels from the Shadow DOM of the embedding-atlas component
+     */
+    private getTopics(callId: string): ToolResult {
+        try {
+            const labels = extractTopicsFromDOM();
+
+            if (labels.length === 0) {
+                return {
+                    name: 'get_topics',
+                    call_id: callId,
+                    result: {
+                        topics: [],
+                        count: 0,
+                        note: 'No topic labels found. The Atlas may still be generating labels or the view may be too zoomed in/out.'
+                    }
+                };
+            }
+
+            return {
+                name: 'get_topics',
+                call_id: callId,
+                result: {
+                    topics: labels,
+                    count: labels.length,
+                    note: 'These are the cluster topic labels currently visible on the Atlas map. Labels change based on zoom level and viewport position.'
+                }
+            };
+        } catch (error) {
+            return {
+                name: 'get_topics',
+                call_id: callId,
+                result: null,
+                error: error instanceof Error ? error.message : 'Failed to extract topics from DOM'
+            };
+        }
+    }
 }
 
 /**
@@ -479,6 +574,17 @@ export const TOOL_DEFINITIONS = [
                     }
                 },
                 required: ["terms"]
+            }
+        }
+    },
+    {
+        type: "function" as const,
+        function: {
+            name: "get_topics",
+            description: "Get the cluster topic labels currently visible on the Atlas map. These labels represent the main themes/topics of the reviews in each area of the visualization. Labels are auto-generated based on review content and change dynamically based on zoom level and viewport position.",
+            parameters: {
+                type: "object",
+                properties: {}
             }
         }
     }

@@ -39,6 +39,7 @@ The AI agent can analyze hotel reviews through natural language:
 | `flexible_search` | Multi-term AND/OR search | *"breakfast AND Bali Villa"* |
 | `get_stats` | Rating distribution & averages | *"What's the overall sentiment?"* |
 | `get_sample` | Random review samples (with filters) | *"Show me negative reviews"* |
+| `get_topics` | List visible cluster labels from map | *"What topics are on the map?"* |
 
 **Security:** Only SELECT queries allowed. Results capped at 100 rows.
 
@@ -89,11 +90,13 @@ When the agent finds reviews (e.g., "all 1-star reviews mentioning 'dirty'"), th
 - [ ] Search highlighting on map
 
 ### Phase 5: Topic Navigation
-> ⚠️ Blocked — waiting on Atlas API
+> ⚠️ Partially implemented — `get_topics` done, others pending Atlas API
 
-- [ ] `get_topics` — list visible cluster labels
+- [x] `get_topics` — list visible cluster labels ✅ *(implemented via Shadow DOM scraping)*
 - [ ] `select_topic` — get documents in a cluster
 - [ ] `drill_down` — explore sub-clusters
+
+**Implementation Note:** Since the Atlas library doesn't expose topic labels via API, `get_topics` extracts them by traversing the Shadow DOM and finding text elements with hyphenated content (e.g., `amsterdam-museums-tram-hotel`).
 
 **Tracking:** [GitHub Issue #142](https://github.com/apple/embedding-atlas/issues/142)
 

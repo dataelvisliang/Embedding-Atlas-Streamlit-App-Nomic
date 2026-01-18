@@ -108,6 +108,17 @@ const TOOLS = [
                 required: ["terms"]
             }
         }
+    },
+    {
+        type: "function",
+        function: {
+            name: "get_topics",
+            description: "Get the cluster topic labels currently visible on the Atlas map. These labels represent the main themes/topics of the reviews in each area of the visualization (e.g., 'amsterdam-museums-tram-hotel', 'breakfast-room-staff-clean'). Use this to understand what topics the user is looking at or to explore the map's content.",
+            parameters: {
+                type: "object",
+                properties: {}
+            }
+        }
     }
 ];
 
@@ -128,12 +139,14 @@ AVAILABLE TOOLS:
 3. flexible_search: Search for MULTIPLE terms with AND/OR logic (PREFERRED for multi-word queries)
 4. get_stats: Get overall statistics and rating distribution
 5. get_sample: Get sample reviews to understand the data
+6. get_topics: Get cluster topic labels currently visible on the Atlas map
 
 INSTRUCTIONS:
 - Always use tools to gather data before answering questions
 - For multi-word queries like "breakfast at Bali Villa", use flexible_search with terms=["breakfast", "Bali Villa"] and mode="AND"
 - flexible_search returns individual term counts - use these to explain data availability
 - For quantitative questions (counts, averages), use sql_query
+- Use get_topics to see what clusters/themes are visible on the map
 - Show your reasoning and cite specific data
 - Be concise but thorough
 
@@ -142,7 +155,8 @@ EXAMPLES:
 - "Reviews mentioning pool or beach" → flexible_search({terms: ["pool", "beach"], mode: "OR"})
 - "What do people say about breakfast?" → text_search("breakfast")
 - "What's the average rating?" → get_stats with include_rating_distribution=true
-- "How many 5-star reviews?" → sql_query("SELECT COUNT(*) FROM reviews WHERE Rating = 5")`;
+- "How many 5-star reviews?" → sql_query("SELECT COUNT(*) FROM reviews WHERE Rating = 5")
+- "What topics are on the map?" → get_topics()`;
 
 interface AgentMessage {
     role: 'system' | 'user' | 'assistant' | 'tool';
