@@ -3,8 +3,8 @@ import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
 export default defineConfig({
-  // Base path for GitHub Pages (Repo Name)
-  base: "/Embedding-Atlas-App-Nomic/",
+  // Use "/" for Vercel, "/Embedding-Atlas-App-Nomic/" for GitHub Pages
+  base: process.env.VERCEL ? "/" : "/Embedding-Atlas-App-Nomic/",
   server: {
     headers: {
       'Cross-Origin-Opener-Policy': 'same-origin',

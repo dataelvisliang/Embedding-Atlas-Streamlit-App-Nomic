@@ -1,32 +1,99 @@
-import { useState, useEffect } from 'react';
-import { coordinator, wasmConnector } from '@uwdata/mosaic-core';
+import { useState, useEffect, useRef } from 'react';
+import { coordinator, wasmConnector, Coordinator } from '@uwdata/mosaic-core';
 import { EmbeddingAtlas } from 'embedding-atlas/react';
-import { MessageCircle, X, Send } from 'lucide-react';
+import { MessageCircle, X, Send, Trash2, Database, Search, BarChart3 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { useAgentChat } from './hooks/useAgentChat';
 import './App.css';
 
 // Initialize coordinator globally
 const c = coordinator();
 
+
 function App() {
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const [messages, setMessages] = useState<{ role: 'user' | 'assistant', content: string }[]>([
-    { role: 'assistant', content: 'Hello! Ask me anything about the TripAdvisor reviews.' }
-  ]);
   const [input, setInput] = useState('');
   const [dataLoaded, setDataLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedPoints, setSelectedPoints] = useState<any[]>([]);
+  const [selectionPredicate, setSelectionPredicate] = useState<string | null>(null);
+  const [coordinatorReady, setCoordinatorReady] = useState<Coordinator | null>(null);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Use the agent chat hook
+  const {
+    messages,
+    isLoading,
+    currentStep,
+    toolsExecuted,
+    sendMessage,
+    clearChat
+  } = useAgentChat(coordinatorReady);
+
+  // Fetch selected points when predicate changes
+  useEffect(() => {
+    async function fetchSelectedPoints() {
+      if (!selectionPredicate || !coordinatorReady) {
+        setSelectedPoints([]);
+        return;
+      }
+
+      try {
+        console.log("[Selection] Predicate changed:", selectionPredicate);
+
+        // First get the total count of selected points
+        const countQuery = `SELECT COUNT(*) as total FROM reviews WHERE ${selectionPredicate}`;
+        const countResult = await coordinatorReady.query(countQuery);
+        const totalCount = countResult.toArray()[0]?.total || 0;
+        console.log("[Selection] Total selected:", totalCount);
+
+        // Fetch more reviews - we'll truncate based on token limit in useAgentChat
+        const query = `SELECT __row_index__ as identifier, Rating, description FROM reviews WHERE ${selectionPredicate} LIMIT 200`;
+        console.log("[Selection] Querying sample:", query);
+
+        const result = await coordinatorReady.query(query);
+        const rows = result.toArray();
+        console.log("[Selection] Got", rows.length, "sample points");
+
+        // Transform to match expected format, include total count
+        const points = rows.map((r: any) => ({
+          identifier: r.identifier,
+          text: r.description,
+          fields: {
+            Rating: r.Rating,
+            description: r.description
+          }
+        }));
+
+        // Store total count in the first point for reference
+        if (points.length > 0) {
+          points[0]._totalSelected = totalCount;
+        }
+
+        setSelectedPoints(points.length > 0 ? Object.assign(points, { totalCount }) : []);
+      } catch (err) {
+        console.error("[Selection] Failed to fetch selected points:", err);
+        setSelectedPoints([]);
+      }
+    }
+
+    fetchSelectedPoints();
+  }, [selectionPredicate, coordinatorReady]);
+
+  // Auto-scroll to bottom of messages
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isLoading]);
 
   useEffect(() => {
     async function init() {
       try {
         console.log("Initializing Mosaic Coordinator...");
-        // Initialize DuckDB connection asynchronously
         const connector = await wasmConnector();
         c.databaseConnector(connector);
 
-        // Use BASE_URL to correctly locate data on GitHub Pages (subdirectory) or Dev (root)
-        // import.meta.env.BASE_URL is set in vite.config.ts
         const baseUrl = import.meta.env.BASE_URL.endsWith('/')
           ? import.meta.env.BASE_URL
           : import.meta.env.BASE_URL + '/';
@@ -41,6 +108,7 @@ function App() {
 
         console.log("Parquet loaded successfully.");
         setDataLoaded(true);
+        setCoordinatorReady(c as unknown as Coordinator);
       } catch (e: any) {
         console.error("Initialization failed:", e);
         setError(e.message || String(e));
@@ -49,19 +117,22 @@ function App() {
     init();
   }, []);
 
-  const handleSend = () => {
-    if (!input.trim()) return;
-    setMessages(prev => [...prev, { role: 'user', content: input }]);
-
-    // Logic for "Context-Aware" Chat
-    const contextInfo = selectedPoints.length > 0
-      ? `(Context: ${selectedPoints.length} reviews selected)`
-      : "(Context: All reviews)";
-
-    setTimeout(() => {
-      setMessages(prev => [...prev, { role: 'assistant', content: `I received: "${input}". ${contextInfo}. Backend integration coming next!` }]);
-    }, 1000);
+  const handleSend = async () => {
+    if (!input.trim() || isLoading) return;
+    const userMessage = input.trim();
     setInput('');
+    // Pass both selectedPoints and the predicate for tool queries
+    await sendMessage(userMessage, selectedPoints, selectionPredicate);
+  };
+
+  // Tool icon mapping
+  const getToolIcon = (toolName: string) => {
+    switch (toolName) {
+      case 'sql_query': return <Database size={12} />;
+      case 'text_search': return <Search size={12} />;
+      case 'get_stats': return <BarChart3 size={12} />;
+      default: return <Database size={12} />;
+    }
   };
 
   return (
@@ -86,15 +157,16 @@ function App() {
               pointSize: 3,
             }}
             initialState={{ version: "0.0.0", timestamp: Date.now() }}
-            // @ts-ignore
-            onSelection={(selection) => {
-              // This is the bridge Phase 1!
-              // 'selection' is an array of data points
-              console.log("Selection updated:", selection?.length);
-              setSelectedPoints(selection || []);
-              if (selection && selection.length > 0 && !isChatOpen) {
-                // Auto-open chat if useful? Maybe just show a badge.
-              }
+            onStateChange={(state) => {
+              // Only update if predicate actually changed to avoid re-render spam
+              const newPredicate = state.predicate || null;
+              setSelectionPredicate(prev => {
+                if (prev !== newPredicate) {
+                  console.log("[Atlas] Predicate changed:", newPredicate);
+                  return newPredicate;
+                }
+                return prev;
+              });
             }}
           />
         ) : (
@@ -111,7 +183,7 @@ function App() {
             <MessageCircle size={24} />
             <span>Ask AI</span>
             {selectedPoints.length > 0 && (
-              <span className="selection-badge">{selectedPoints.length}</span>
+              <span className="selection-badge">{(selectedPoints as any).totalCount || selectedPoints.length}</span>
             )}
           </button>
         )}
@@ -120,34 +192,89 @@ function App() {
           <div className="chat-window">
             <div className="chat-header">
               <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <h3>Review Assistant</h3>
+                <h3>
+                  <Database size={16} style={{ marginRight: '6px', opacity: 0.7 }} />
+                  Atlas Analyst
+                </h3>
                 {selectedPoints.length > 0 && (
                   <span style={{ fontSize: '10px', color: '#60a5fa', fontWeight: 'normal' }}>
-                    Focusing on {selectedPoints.length} selected items
+                    {(selectedPoints as any).totalCount || selectedPoints.length} items selected on map
                   </span>
                 )}
               </div>
-              <button onClick={() => setIsChatOpen(false)}>
-                <X size={20} />
-              </button>
+              <div className="header-actions">
+                <button onClick={clearChat} title="Clear chat">
+                  <Trash2 size={16} />
+                </button>
+                <button onClick={() => setIsChatOpen(false)}>
+                  <X size={20} />
+                </button>
+              </div>
             </div>
+
             <div className="chat-messages">
               {messages.map((msg, i) => (
                 <div key={i} className={`message ${msg.role}`}>
-                  {msg.content}
+                  <div className="message-content">
+                    {msg.role === 'assistant' ? (
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                    ) : (
+                      msg.content
+                    )}
+                  </div>
+                  {msg.toolResults && msg.toolResults.length > 0 && (
+                    <div className="tools-used">
+                      {msg.toolResults.map((t, k) => (
+                        <span key={k} className="tool-badge">
+                          {getToolIcon(t.name)}
+                          {t.name.replace('_', ' ')}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
+
+              {/* Loading indicator with tool status */}
+              {isLoading && (
+                <div className="message assistant loading">
+                  <div className="typing-indicator">
+                    <span></span><span></span><span></span>
+                  </div>
+                  {currentStep && (
+                    <div className="step-indicator">{currentStep}</div>
+                  )}
+                  {toolsExecuted.length > 0 && (
+                    <div className="tools-executing">
+                      {toolsExecuted.map((tool, i) => (
+                        <span key={i} className="tool-badge executing">
+                          {getToolIcon(tool)}
+                          {tool.replace('_', ' ')}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div ref={messagesEndRef} />
             </div>
+
             <div className="chat-input-area">
               <input
                 type="text"
-                placeholder="Ask about sentiments, topics..."
+                placeholder={isLoading ? "Analyzing..." : "Ask about ratings, topics, trends..."}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                onKeyDown={(e) => e.key === 'Enter' && !isLoading && handleSend()}
+                disabled={isLoading}
               />
-              <button onClick={handleSend}>
-                <Send size={18} />
+              <button onClick={handleSend} disabled={isLoading}>
+                {isLoading ? (
+                  <div className="spinner-small" />
+                ) : (
+                  <Send size={18} />
+                )}
               </button>
             </div>
           </div>
