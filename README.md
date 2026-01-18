@@ -4,8 +4,7 @@ An interactive visualization and analysis tool for TripAdvisor hotel reviews usi
 
 ## Atlas Agent Demo
 
-<video src="web-app/docs/assets/Atlas%20Agent%20Demo.mp4" controls="controls" style="max-width: 100%;">
-</video>
+https://github.com/user-attachments/assets/REPLACE-WITH-ACTUAL-VIDEO-ID
 
 ## Atlas Agent
 
