@@ -181,7 +181,7 @@ function App() {
         {!isChatOpen && (
           <button className="chat-fab" onClick={() => setIsChatOpen(true)}>
             <MessageCircle size={24} />
-            <span>Ask AI</span>
+            <span>Atlas Agent</span>
             {selectedPoints.length > 0 && (
               <span className="selection-badge">{(selectedPoints as any).totalCount || selectedPoints.length}</span>
             )}

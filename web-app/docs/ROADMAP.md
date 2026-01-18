@@ -43,7 +43,7 @@ The AI agent can analyze hotel reviews through natural language:
 
 ### Chat Features
 
-- ✅ Floating "Ask AI" widget with glassmorphism design
+- ✅ Floating "Atlas Agent" widget with glassmorphism design
 - ✅ Map selection → LLM context (lasso/rectangle tools)
 - ✅ Multi-step agent reasoning (up to 8 tool calls)
 - ✅ Real-time tool execution feedback
