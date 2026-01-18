@@ -77,6 +77,37 @@ const TOOLS = [
                 }
             }
         }
+    },
+    {
+        type: "function",
+        function: {
+            name: "flexible_search",
+            description: "Search for reviews where MULTIPLE terms ALL appear in the SAME review. Default mode is AND - all terms must be present in each matching review. Supports regex patterns when regex=true (e.g., 'break(fast|fst)' for typos, 'Bali.*Villa' for flexible matching).",
+            parameters: {
+                type: "object",
+                properties: {
+                    terms: {
+                        type: "array",
+                        items: { type: "string" },
+                        description: "Array of search terms that must ALL appear in matching reviews. Example: ['breakfast', 'Bali Villa']"
+                    },
+                    mode: {
+                        type: "string",
+                        enum: ["AND", "OR"],
+                        description: "AND (default) = ALL terms must appear in the SAME review. OR = matches reviews with ANY term (use for synonyms only)."
+                    },
+                    limit: {
+                        type: "number",
+                        description: "Maximum results (default: 15, max: 50)"
+                    },
+                    regex: {
+                        type: "boolean",
+                        description: "If true, treat terms as regex patterns. Examples: 'break(fast|fst)' matches typos, 'Bali.*Villa' matches 'Bali Beach Villa'. Default: false"
+                    }
+                },
+                required: ["terms"]
+            }
+        }
     }
 ];
 
@@ -92,26 +123,26 @@ TABLE: reviews
 - neighbors: Pre-computed similar reviews (json)
 
 AVAILABLE TOOLS:
-1. sql_query: Execute SQL SELECT queries on the reviews table for aggregations and analysis
-2. text_search: Search reviews containing specific keywords or phrases
-3. get_stats: Get overall statistics and rating distribution
-4. get_sample: Get sample reviews to understand the data
+1. sql_query: Execute SQL SELECT queries for aggregations and analysis
+2. text_search: Search reviews for a single keyword or phrase
+3. flexible_search: Search for MULTIPLE terms with AND/OR logic (PREFERRED for multi-word queries)
+4. get_stats: Get overall statistics and rating distribution
+5. get_sample: Get sample reviews to understand the data
 
 INSTRUCTIONS:
-- Always use tools to gather data before answering questions about the reviews
-- For quantitative questions (counts, averages, distributions), use sql_query
-- For finding specific topics, themes, or complaints, use text_search
-- Show your reasoning by explaining what you're looking for
-- Cite specific data or review excerpts in your answers
+- Always use tools to gather data before answering questions
+- For multi-word queries like "breakfast at Bali Villa", use flexible_search with terms=["breakfast", "Bali Villa"] and mode="AND"
+- flexible_search returns individual term counts - use these to explain data availability
+- For quantitative questions (counts, averages), use sql_query
+- Show your reasoning and cite specific data
 - Be concise but thorough
-- If users ask about selected reviews on the visualization, explain they can ask questions about that specific subset
 
 EXAMPLES:
-- "What do people say about breakfast?" → Use text_search("breakfast")
-- "What's the average rating?" → Use get_stats with include_rating_distribution=true
-- "How many 5-star reviews?" → Use sql_query("SELECT COUNT(*) FROM reviews WHERE Rating = 5")
-- "Show me some negative reviews" → Use get_sample with rating_filter=1 or 2
-- "What percentage are 4+ stars?" → Use sql_query for counts then calculate`;
+- "What about breakfast at Bali Villa?" → flexible_search({terms: ["breakfast", "Bali Villa"], mode: "AND"})
+- "Reviews mentioning pool or beach" → flexible_search({terms: ["pool", "beach"], mode: "OR"})
+- "What do people say about breakfast?" → text_search("breakfast")
+- "What's the average rating?" → get_stats with include_rating_distribution=true
+- "How many 5-star reviews?" → sql_query("SELECT COUNT(*) FROM reviews WHERE Rating = 5")`;
 
 interface AgentMessage {
     role: 'system' | 'user' | 'assistant' | 'tool';

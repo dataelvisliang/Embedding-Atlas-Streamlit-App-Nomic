@@ -35,7 +35,8 @@ The AI agent can analyze hotel reviews through natural language:
 | Tool | What It Does | Example Query |
 |------|--------------|---------------|
 | `sql_query` | Run SELECT queries on DuckDB | *"How many 5-star reviews mention breakfast?"* |
-| `text_search` | Case-insensitive keyword search | *"Find reviews about noisy rooms"* |
+| `text_search` | Single keyword/phrase search | *"Find reviews about noisy rooms"* |
+| `flexible_search` | Multi-term AND/OR search | *"breakfast AND Bali Villa"* |
 | `get_stats` | Rating distribution & averages | *"What's the overall sentiment?"* |
 | `get_sample` | Random review samples (with filters) | *"Show me negative reviews"* |
 
@@ -82,8 +83,9 @@ When the agent finds reviews (e.g., "all 1-star reviews mentioning 'dirty'"), th
 ## 🚧 Planned Features
 
 ### Phase 4: Enhanced Search
+- [x] Multi-term AND/OR search (`flexible_search` tool)
 - [ ] Semantic vector search (cosine similarity)
-- [ ] Fuzzy/regex text matching
+- [ ] Fuzzy matching (Levenshtein distance)
 - [ ] Search highlighting on map
 
 ### Phase 5: Topic Navigation

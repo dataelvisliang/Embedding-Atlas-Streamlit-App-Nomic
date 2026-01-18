@@ -53,6 +53,9 @@ export class ToolExecutor {
                 case 'text_search':
                     return await this.textSearch(toolCall.id, args.query, args.limit);
 
+                case 'flexible_search':
+                    return await this.flexibleSearch(toolCall.id, args.terms, args.mode, args.limit, args.regex);
+
                 case 'get_stats':
                     return await this.getStats(toolCall.id, args.include_rating_distribution);
 
@@ -239,6 +242,135 @@ export class ToolExecutor {
             }
         };
     }
+
+    /**
+     * Flexible multi-term search with AND/OR modes and optional regex support
+     * Solves the problem of "breakfast Bali Villa" finding nothing because it's treated as one phrase
+     */
+    private async flexibleSearch(
+        callId: string,
+        terms: string[],
+        mode: 'AND' | 'OR' = 'AND',
+        limit: number = 15,
+        regex: boolean = false
+    ): Promise<ToolResult> {
+        // Handle string input (in case LLM sends comma-separated string)
+        let searchTerms: string[] = [];
+        if (typeof terms === 'string') {
+            // Split by comma, semicolon, or " AND " / " OR "
+            searchTerms = (terms as string)
+                .split(/[,;]|\s+AND\s+|\s+OR\s+/i)
+                .map(t => t.trim())
+                .filter(t => t.length > 0);
+        } else if (Array.isArray(terms)) {
+            searchTerms = terms.map(t => String(t).trim()).filter(t => t.length > 0);
+        }
+
+        if (searchTerms.length === 0) {
+            return {
+                name: 'flexible_search',
+                call_id: callId,
+                result: null,
+                error: 'No search terms provided'
+            };
+        }
+
+        const safeLimit = Math.min(Math.max(1, limit || 15), 50);
+
+        // Build WHERE clause - use regex or ILIKE based on mode
+        const conditions = searchTerms.map(term => {
+            if (regex) {
+                // Use regexp_matches for regex mode
+                // Escape single quotes for SQL
+                const escaped = term.replace(/'/g, "''");
+                return `regexp_matches(description, '${escaped}', 'i')`;
+            } else {
+                // Use ILIKE for normal substring matching
+                const escaped = term.replace(/'/g, "''");
+                return `description ILIKE '%${escaped}%'`;
+            }
+        });
+
+        const whereClause = conditions.join(mode === 'AND' ? ' AND ' : ' OR ');
+
+        // Query with matching reviews
+        const sql = `
+            SELECT __row_index__, Rating, description
+            FROM reviews
+            WHERE ${whereClause}
+            LIMIT ${safeLimit}
+        `;
+
+        let rows: any[] = [];
+        let totalMatches = 0;
+
+        try {
+            const result = await this.coordinator.query(sql);
+            rows = result.toArray();
+
+            // Get total count
+            const countSql = `
+                SELECT COUNT(*) as total
+                FROM reviews
+                WHERE ${whereClause}
+            `;
+            const countResult = await this.coordinator.query(countSql);
+            totalMatches = Number(countResult.toArray()[0]?.total || 0);
+        } catch (error) {
+            // If regex is invalid, return helpful error
+            if (regex && error instanceof Error) {
+                return {
+                    name: 'flexible_search',
+                    call_id: callId,
+                    result: null,
+                    error: `Invalid regex pattern: ${error.message}`
+                };
+            }
+            throw error;
+        }
+
+        // Also get individual term counts for context
+        const termCounts: { term: string; count: number }[] = [];
+        for (const term of searchTerms) {
+            try {
+                let termCountSql: string;
+                if (regex) {
+                    const escaped = term.replace(/'/g, "''");
+                    termCountSql = `SELECT COUNT(*) as cnt FROM reviews WHERE regexp_matches(description, '${escaped}', 'i')`;
+                } else {
+                    const escaped = term.replace(/'/g, "''");
+                    termCountSql = `SELECT COUNT(*) as cnt FROM reviews WHERE description ILIKE '%${escaped}%'`;
+                }
+                const termCountResult = await this.coordinator.query(termCountSql);
+                termCounts.push({
+                    term,
+                    count: Number(termCountResult.toArray()[0]?.cnt || 0)
+                });
+            } catch {
+                termCounts.push({ term, count: -1 }); // -1 indicates error
+            }
+        }
+
+        return {
+            name: 'flexible_search',
+            call_id: callId,
+            result: {
+                terms: searchTerms,
+                mode: mode,
+                regex: regex,
+                total_matches: totalMatches,
+                matches_returned: rows.length,
+                term_breakdown: termCounts,
+                reviews: rows.map(r => ({
+                    id: r.__row_index__,
+                    rating: r.Rating,
+                    excerpt: r.description?.length > 300
+                        ? r.description.substring(0, 300) + '...'
+                        : r.description
+                }))
+            }
+        };
+    }
 }
 
 /**
@@ -316,6 +448,37 @@ export const TOOL_DEFINITIONS = [
                         description: "Optional: only get reviews with this star rating (1-5)"
                     }
                 }
+            }
+        }
+    },
+    {
+        type: "function" as const,
+        function: {
+            name: "flexible_search",
+            description: "Search for reviews where MULTIPLE terms ALL appear in the SAME review. Default mode is AND - all terms must be present in each matching review. Example: terms=['breakfast', 'Bali Villa'] finds only reviews mentioning BOTH 'breakfast' AND 'Bali Villa' together. Returns individual term counts to explain data availability.",
+            parameters: {
+                type: "object",
+                properties: {
+                    terms: {
+                        type: "array",
+                        items: { type: "string" },
+                        description: "Array of search terms that must ALL appear in matching reviews. Example: ['breakfast', 'Bali Villa']"
+                    },
+                    mode: {
+                        type: "string",
+                        enum: ["AND", "OR"],
+                        description: "AND (default) = ALL terms must appear in the SAME review. OR = matches reviews with ANY term (use for synonyms only)."
+                    },
+                    limit: {
+                        type: "number",
+                        description: "Maximum results to return (default: 15, max: 50)"
+                    },
+                    regex: {
+                        type: "boolean",
+                        description: "If true, treat terms as regex patterns. Examples: 'break(fast|fst)' matches typos, 'Bali.*Villa' matches 'Bali Beach Villa'. Default: false"
+                    }
+                },
+                required: ["terms"]
             }
         }
     }
