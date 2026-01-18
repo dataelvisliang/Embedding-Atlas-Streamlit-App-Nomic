@@ -8,6 +8,7 @@ Technical documentation for the Atlas Analyst project.
 |----------|-------------|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Detailed system architecture with Mermaid diagrams |
 | [ROADMAP.md](ROADMAP.md) | Feature roadmap and implementation status |
+| [DEBUGGING_REPORT.md](DEBUGGING_REPORT.md) | Historical debugging notes (Vite/worker issues) |
 
 ## Quick Links
 
