@@ -150,3 +150,44 @@ npm install
 - Labels generate correctly with linked packages
 - Highlight feature (programmatic multi-point selection) works
 - Local modifications can be tested without publishing to npm
+
+---
+
+## Issue: Labels Not Working with Published npm Package (@dataelvisliang/embedding-atlas)
+
+### Symptoms
+After switching from `embedding-atlas` (original) to `@dataelvisliang/embedding-atlas` (forked npm package with highlight support):
+- Map renders correctly
+- Points display correctly
+- Labels stuck at "Generating labels..." forever
+- Console shows warnings about missing worker files in `.vite/deps/`
+
+### Root Cause
+The `vite.config.ts` had `embedding-atlas` in `optimizeDeps.exclude`, but the new package name `@dataelvisliang/embedding-atlas` was not included. Vite was pre-bundling the new package, breaking the WASM worker path resolution.
+
+### The Fix
+
+Add the new package name to `optimizeDeps.exclude`:
+
+```typescript
+// vite.config.ts
+optimizeDeps: {
+  exclude: [
+    "embedding-atlas",
+    "@dataelvisliang/embedding-atlas",  // NEW: forked package with highlight support
+    "@embedding-atlas/viewer",
+    "@embedding-atlas/component",
+    "@embedding-atlas/table",
+    "@uwdata/mosaic-core",
+    "@duckdb/duckdb-wasm"
+  ],
+},
+```
+
+### Key Lesson
+When switching to a different npm package (even a fork of the same library), always update `optimizeDeps.exclude` to include the new package name. The package name in the exclude list must exactly match the name in `package.json` dependencies.
+
+### Result
+- Labels generate correctly with the published `@dataelvisliang/embedding-atlas` package
+- Highlight feature works (agent tool results highlight points on map)
+- No need for `npm link` - uses published npm package directly

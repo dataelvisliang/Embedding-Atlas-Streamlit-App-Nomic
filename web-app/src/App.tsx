@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { coordinator, wasmConnector, Coordinator } from '@uwdata/mosaic-core';
-import { EmbeddingAtlas } from 'embedding-atlas/react';
+import { EmbeddingAtlas } from '@dataelvisliang/embedding-atlas/react';
 import { MessageCircle, X, Send, Trash2, Database, Search, BarChart3 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';

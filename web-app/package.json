@@ -10,13 +10,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@dataelvisliang/embedding-atlas": "^0.15.0-highlight.2",
     "@duckdb/duckdb-wasm": "^1.33.1-dev18.0",
     "@uwdata/mosaic-core": "^0.21.1",
     "@uwdata/mosaic-duckdb": "^0.21.1",
     "@uwdata/mosaic-spec": "^0.21.1",
     "@uwdata/mosaic-sql": "^0.21.1",
     "@uwdata/vgplot": "^0.21.1",
-    "embedding-atlas": "^0.15.0",
     "lucide-react": "^0.562.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

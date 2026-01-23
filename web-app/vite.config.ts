@@ -28,6 +28,7 @@ export default defineConfig({
   optimizeDeps: {
     exclude: [
       "embedding-atlas",
+      "@dataelvisliang/embedding-atlas",
       "@embedding-atlas/viewer",
       "@embedding-atlas/component",
       "@embedding-atlas/table",

@@ -225,7 +225,7 @@ ${reviewsList}
                 console.log("[AgentChat] Selection context built with", reviewsIncluded, "reviews (~" + Math.round(totalChars / 4) + " tokens), total selected:", totalSelected);
             }
 
-            const maxIterations = 8; // Prevent infinite loops
+            const maxIterations = 10; // Prevent infinite loops
             let iteration = 0;
             const allToolsExecuted: string[] = [];
 
